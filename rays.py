@@ -4,53 +4,49 @@ from numba import njit
 
 
 @njit(fastmath=True, cache=True)
-def get_rays(x, y, ang, num_ray, delta_ang, card):
-    n = len(card)
-    m = len(card[0])
-    a, ind = ang-delta_ang, 0
-    lengs = numpy.zeros((num_ray+1, ))
-    while a < ang+delta_ang:
-        go = 1
-        rad_a = math.radians(a)
+def get_rays(x, y, angle, a, num_ray, radius_ang, card):
+    delta_ang = radius_ang*2 / num_ray
+    rays = numpy.zeros((num_ray+1, 4))
+    for ind in range(num_ray):
+        rad_a = math.radians(angle - radius_ang + delta_ang * ind)
+        sin_a = math.sin(rad_a) if math.sin(rad_a) != 0 else 0.001
+        cos_a = math.cos(rad_a) if math.cos(rad_a) != 0 else 0.001
+        tan_a = sin_a / cos_a
 
-        zn_v = math.cos(rad_a) / abs(math.cos(rad_a)) if a != 90 else 1
-        px_v = x + (50 - x % 50)
-        py_v = y - math.tan(rad_a) * (50 - x % 50) if a != 90 else 1
+        zn_v = cos_a / abs(cos_a)
+        px_v = x + (a - x % a)
+        py_v = y - tan_a * (a - x % a)
 
-        zn_g = math.sin(rad_a) / abs(math.sin(rad_a)) if a != 0 else 1
-        px_g = x + 1 / math.tan(rad_a) * (y % 50) if a != 0 else 1
-        py_g = y - y % 50
+        zn_g = sin_a / abs(sin_a)
+        px_g = x + 1 / tan_a * (y % a)
+        py_g = y - y % a
 
-        k = 0
+        first = True
         resv = (0, 0)
         resg = (0, 0)
-        while go:
-            k += 1
-            if k == 10000:
-                go = 0
-
-            if not resv[0] and not (k == 1 and zn_v < 0):
-                j, i = int((px_v + zn_v*3) / 50), int(py_v / 50)
-                if not(0 <= i < n and 0 <= j < m) or card[i][j]:
+        while True:
+            if not resv[0] and not (first and zn_v < 0):
+                j, i = int((px_v + zn_v*3) / a), int(py_v / a)
+                if not(0 <= i < len(card) and 0 <= j < len(card[0])) or card[i][j]:
                     resv = (px_v, py_v)
 
-            if not resg[0] and not (k == 1 and zn_g < 0):
-                j, i = int(px_g / 50), int((py_g - zn_g*3) / 50)
-                if not(0 <= i < n and 0 <= j < m) or card[i][j]:
+            if not resg[0] and not (first and zn_g < 0):
+                j, i = int(px_g / a), int((py_g - zn_g*3) / a)
+                if not(0 <= i < len(card) and 0 <= j < len(card[0])) or card[i][j]:
                     resg = (px_g, py_g)
 
             if resv[0] and resg[0]:
-                go = 0
                 if (x - resv[0]) ** 2 + (y - resv[1]) ** 2 < (x - resg[0]) ** 2 + (y - resg[1]) ** 2:
-                    lengs[ind] = ((x - resv[0]) ** 2 + (y - resv[1]) ** 2)**0.5
+                    rays[ind] = [math.sqrt((x - resv[0]) ** 2 + (y - resv[1]) ** 2), resv[0], resv[1], 0]
                 else:
-                    lengs[ind] = ((x - resg[0]) ** 2 + (y - resg[1]) ** 2)**0.5
+                    rays[ind] = [math.sqrt((x - resg[0]) ** 2 + (y - resg[1]) ** 2), resg[0], resg[1], 1]
+                rays[ind][0] *= math.cos(math.radians(radius_ang - delta_ang * ind))
+                break
 
-            px_v += 50 * zn_v
-            py_v -= math.tan(rad_a) * 50 * zn_v
-            px_g += 1 / (math.tan(rad_a) if a != 0 else 0.0001) * 50 * zn_g
-            py_g -= 50 * zn_g
+            px_v += a * zn_v
+            py_v -= tan_a * a * zn_v
+            px_g += 1 / tan_a * a * zn_g
+            py_g -= a * zn_g
+            first = False
 
-        a += delta_ang*2 / num_ray
-        ind += 1
-    return lengs[::-1]
+    return rays[::-1]
